@@ -304,6 +304,147 @@ void LRU(FILE *fp) {
     rewind(fp); // Reset file pointer for the next simulation
 }
 
+// Function to simulate the Periodic Reference Reset (PER) page replacement algorithm
+void PER(FILE *fp) {
+    PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0};
+    Frame physical_memory[PHYSICAL_PAGES] = {0};
+    int next_available_frame = 0;
+    int PER_pf = 0;
+    int PER_references = 0;
+    int PER_dw = 0;
+    int reference_count = 0;
+    int current_time = 0;
+    char line[256];
+
+    for (int i = 0; i < PHYSICAL_PAGES; i++) {
+        physical_memory[i].process_id = -1;
+    }
+
+    printf("\n Periodic Reference Reset (PER) Algorithm: n");
+
+    while (fgets(line, sizeof(line), fp)) {
+        int process_id, virtual_address;
+        char access_type;
+        if (sscanf(line, "%d %d %c", &process_id, &virtual_address, &access_type) != 3) {
+            continue;
+        }
+        current_time++;
+        reference_count++;
+
+        int virtual_page_number, offset;
+        get_page_offset(virtual_address, &virtual_page_number, &offset);
+
+        if (!page_tables[process_id][virtual_page_number].present) {
+            PER_pf++; // Page Fault
+            PER_references++;
+
+            int frame_to_use;
+            if (next_available_frame < PHYSICAL_PAGES) {
+                frame_to_use = next_available_frame++;
+            } else {
+                int victim_frame = -1; //locate page
+
+                for (int i = 0; i < PHYSICAL_PAGES; i++) { //identify unallocated pages
+                    if (physical_memory[i].process_id == -1) {
+                        victim_frame = i;
+                        break;
+                    }
+                }
+
+                if (victim_frame == -1) {
+                    for (int i = 0; i < PHYSICAL_PAGES; i++) { //check for unreference and clean 
+                        if (physical_memory[i].process_id != -1 &&
+                            !page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].referenced &&
+                            !page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].dirty) {
+                            victim_frame = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (victim_frame == -1) {
+                    for (int i = 0; i < PHYSICAL_PAGES; i++) { //check for unferenced and dirty
+                        if (physical_memory[i].process_id != -1 &&
+                            !page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].referenced &&
+                            page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].dirty) {
+                            victim_frame = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (victim_frame == -1) {
+                    for (int i = 0; i < PHYSICAL_PAGES; i++) { //check for referenced and clean
+                        if (physical_memory[i].process_id != -1 &&
+                            page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].referenced &&
+                            !page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].dirty) {
+                            victim_frame = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (victim_frame == -1) {
+                    for (int i = 0; i < PHYSICAL_PAGES; i++) { //check for referenced and dirty
+                        if (physical_memory[i].process_id != -1 &&
+                            page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].referenced &&
+                            page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].dirty) {
+                            victim_frame = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (victim_frame != -1) {
+                    frame_to_use = victim_frame;
+                    if (physical_memory[frame_to_use].dirty) {
+                        PER_references++;
+                        PER_dw++;
+                        page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].dirty = 0;
+                    }
+                    page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].present = 0;
+                } else {
+                    fprintf(stderr, "Error: No victim frame found for PER replacement\n");
+                    exit(1);
+                }
+            }
+
+            page_tables[process_id][virtual_page_number].present = 1;
+            page_tables[process_id][virtual_page_number].frame_num = frame_to_use;
+            page_tables[process_id][virtual_page_number].dirty = (access_type == 'W');
+            page_tables[process_id][virtual_page_number].referenced = 1;
+
+            physical_memory[frame_to_use].process_id = process_id;
+            physical_memory[frame_to_use].virtual_page_number = virtual_page_number;
+            physical_memory[frame_to_use].last_access_time = current_time;
+            physical_memory[frame_to_use].dirty = (access_type == 'W');
+        } else {
+            page_tables[process_id][virtual_page_number].referenced = 1;
+            if (access_type == 'W') {
+                page_tables[process_id][virtual_page_number].dirty = 1;
+                int frame_num = page_tables[process_id][virtual_page_number].frame_num;
+                physical_memory[frame_num].dirty = 1;
+            }
+            int frame_num = page_tables[process_id][virtual_page_number].frame_num;
+            physical_memory[frame_num].last_access_time = current_time;
+        }
+
+        if (reference_count == REFERENCE_RESET_INTERVAL) {
+            for (int i = 0; i < 10; i++) {
+                for (int j = 0; j < PAGE_TABLE_ENTRIES; j++) {
+                    page_tables[i][j].referenced = 0;
+                }
+            }
+            reference_count = 0;
+        }
+    }
+
+    printf("Total Page Faults: %d\n", PER_pf);
+    printf("Total Disk References: %d\n", PER_references);
+    printf("Total Dirty Page Writes: %d\n", PER_dw);
+    rewind(fp);
+}
+
 int main() {
     char filename[20];
     int data;
@@ -334,6 +475,7 @@ int main() {
     RAND(fp);
     FIFO(fp);
     LRU(fp);
+    PER(fp);
 
     fclose(fp);
     return 0;
