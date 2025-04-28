@@ -304,7 +304,7 @@ void LRU(FILE *fp) {
 // Function to simulate the Periodic Reference Reset (PER) page replacement algorithm
 void PER(FILE *fp) {
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0};
-    Frame physical_memory[PHYSICAL_PAGES] = {0};
+    FRAME physical_memory[PHYSICAL_PAGES] = {0};
     int next_available_frame = 0;
     int PER_pf = 0;
     int PER_references = 0;
@@ -329,7 +329,7 @@ void PER(FILE *fp) {
         reference_count++;
 
         int virtual_page_number, offset;
-        get_page_offset(virtual_address, &virtual_page_number, &offset);
+        PAGE_OFFSET(virtual_address, &virtual_page_number, &offset);
 
         if (!page_tables[process_id][virtual_page_number].present) {
             PER_pf++; // Page Fault
