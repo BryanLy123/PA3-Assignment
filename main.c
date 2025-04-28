@@ -4,11 +4,8 @@
 #include <time.h>
 
 // Global variables for static sizes
-#define PAGE_BYTES 512 /// not used?
-#define VIRTUAL_ADDRESS_BITS 16 // not used?
 #define PHYSICAL_PAGES 32
 #define PAGE_TABLE_ENTRIES 128
-#define VIRTUAL_PAGE_BITS 7
 #define OFFSET_BITS 9
 #define REFERENCE_RESET_INTERVAL 200
 
