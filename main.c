@@ -19,28 +19,24 @@ typedef struct {
 
 // Frame in physical memory struct
 typedef struct {
-    int process_id;
-    int virtual_page_number;
+    int pid;
+    int virtual_pn; //virtual page number
     int load_time;
-    int last_access_time;
+    int last_acc_time;
     int dirty;
 } FRAME;
 
 // Function to extract virtual page number and offset from a virtual address
-void PAGE_OFFSET(int virtual_address, int *page_number, int *offset) {
-    *page_number = virtual_address >> OFFSET_BITS; // shift right by 9 bits
-    *offset = virtual_address & ((1 << OFFSET_BITS) - 1);
+void PAGE_OFFSET(int virtual_addr, int *page_num, int *offset) {
+    *page_num = virtual_addr >> OFFSET_BITS; // shift right by 9 bits
+    *offset = virtual_addr & ((1 << OFFSET_BITS) - 1);
 }
 
 // Function to simulate the Random (RAND) page replacement algorithm
 void RAND(FILE *fp) {
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0}; // Assuming max 10 processes
     FRAME physical_memory[PHYSICAL_PAGES] = {0};
-    int next_available_frame = 0;
-    int rand_pf = 0;
-    int rand_references = 0;
-    int rand_dw = 0; // dw = dirty write
-    int reference_count = 0;
+    int next_aframe, rand_pf, rand_ref, rand_dw, ref_count= 0; // aframe = available frame
     char line[256];
 
     // Initialize random seed
@@ -48,75 +44,75 @@ void RAND(FILE *fp) {
 
     // Set process ID to -1 to mark frames as empty
     for (int i = 0; i < PHYSICAL_PAGES; i++) {
-        physical_memory[i].process_id = -1; 
+        physical_memory[i].pid = -1; 
     }
 
     printf("\n Random (RAND) Algorithm: \n");
 
     // Read each line of file fp
     while (fgets(line, sizeof(line), fp)) {
-        int process_id, virtual_address;
+        int pid, virtual_addr;
         char access_type;
-        if (sscanf(line, "%d %d %c", &process_id, &virtual_address, &access_type) != 3) {
+        if (sscanf(line, "%d %d %c", &pid, &virtual_addr, &access_type) != 3) {
             continue;
         }
-        reference_count++;
+        ref_count++;
 
-        int virtual_page_number, offset;
-        PAGE_OFFSET(virtual_address, &virtual_page_number, &offset);
+        int virtual_pn, offset;
+        PAGE_OFFSET(virtual_addr, &virtual_pn, &offset);
         
         // Check if page is present
-        if (!page_tables[process_id][virtual_page_number].present) {
+        if (!page_tables[pid][virtual_pn].present) {
             rand_pf++; // if page not present, count page fault
-            rand_references++; // count disk reference
+            rand_ref++; // count disk reference
 
             // If there are still empty frames to use
-            int frame_to_use;
-            if (next_available_frame < PHYSICAL_PAGES) {
-                frame_to_use = next_available_frame++;
+            int use_frame;
+            if (next_aframe < PHYSICAL_PAGES) {
+                use_frame = next_aframe++;
             } else {
-                frame_to_use = rand() % PHYSICAL_PAGES;
-                if (physical_memory[frame_to_use].process_id != -1 &&
-                    page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].dirty) {
-                    rand_references++;
+                use_frame = rand() % PHYSICAL_PAGES;
+                if (physical_memory[use_frame].pid != -1 &&
+                    page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].dirty) {
+                    rand_ref++;
                     rand_dw++;
-                    page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].dirty = 0;
+                    page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].dirty = 0;
                 }
-                page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].present = 0;
+                page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].present = 0;
             }
 
             // Update page table for the new page
-            page_tables[process_id][virtual_page_number].present = 1;
-            page_tables[process_id][virtual_page_number].frame_num = frame_to_use;
-            page_tables[process_id][virtual_page_number].dirty = (access_type == 'W');
-            page_tables[process_id][virtual_page_number].referenced = 1;
+            page_tables[pid][virtual_pn].present = 1;
+            page_tables[pid][virtual_pn].frame_num = use_frame;
+            page_tables[pid][virtual_pn].dirty = (access_type == 'W');
+            page_tables[pid][virtual_pn].referenced = 1;
 
             // Update physical memory
-            physical_memory[frame_to_use].process_id = process_id;
-            physical_memory[frame_to_use].virtual_page_number = virtual_page_number;
-            physical_memory[frame_to_use].dirty = (access_type == 'W');
+            physical_memory[use_frame].pid = pid;
+            physical_memory[use_frame].virtual_pn = virtual_pn;
+            physical_memory[use_frame].dirty = (access_type == 'W');
         } else { //verify corresponding entry 
-            page_tables[process_id][virtual_page_number].referenced = 1;
+            page_tables[pid][virtual_pn].referenced = 1;
             if (access_type == 'W') {
-                page_tables[process_id][virtual_page_number].dirty = 1;
-                int frame_num = page_tables[process_id][virtual_page_number].frame_num;
+                page_tables[pid][virtual_pn].dirty = 1;
+                int frame_num = page_tables[pid][virtual_pn].frame_num;
                 physical_memory[frame_num].dirty = 1;
             }
-            int frame_num = page_tables[process_id][virtual_page_number].frame_num;
+            int frame_num = page_tables[pid][virtual_pn].frame_num;
         }
 
-        if (reference_count == REFERENCE_RESET_INTERVAL) {
+        if (ref_count == REFERENCE_RESET_INTERVAL) {
             for (int i = 0; i < 10; i++) {
                 for (int j = 0; j < PAGE_TABLE_ENTRIES; j++) {
                     page_tables[i][j].referenced = 0;
                 }
             }
-            reference_count = 0;
+            ref_count = 0;
         }
     }
 
     printf("Total Page Faults: %d\n", rand_pf);
-    printf("Total Disk References: %d\n", rand_references);
+    printf("Total Disk References: %d\n", rand_ref);
     printf("Total Dirty Page Writes: %d\n", rand_dw);
     rewind(fp); // Reset file pointer for the next simulation
 }
@@ -125,80 +121,75 @@ void RAND(FILE *fp) {
 void FIFO(FILE*fp){
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0};
     FRAME physical_memory[PHYSICAL_PAGES] = {0};
-    int next_available_frame = 0;
-    int FIFO_pf = 0;
-    int FIFO_references = 0;
-    int FIFO_dw = 0;
-    int reference_count = 0;
-    int oldest_frame = 0;
+    int next_aframe, FIFO_pf, FIFO_ref, FIFO_dw, ref_count, oldest_frame = 0;
     char line[256];
 
     printf("\n FIFO Algorithm: \n");
 
     while (fgets(line, sizeof(line), fp)){
-        int process_id, virtual_address;
+        int pid, virtual_addr;
         char access_type;
-        if (sscanf(line, "%d %d %c", &process_id, &virtual_address, &access_type) != 3) {
+        if (sscanf(line, "%d %d %c", &pid, &virtual_addr, &access_type) != 3) {
             continue;
         }
-        reference_count++;
+        ref_count++;
 
-        int virtual_page_number, offset;
-        PAGE_OFFSET(virtual_address, &virtual_page_number, &offset);
+        int virtual_pn, offset;
+        PAGE_OFFSET(virtual_addr, &virtual_pn, &offset);
     
-        if (!page_tables[process_id][virtual_page_number].present) {
+        if (!page_tables[pid][virtual_pn].present) {
             FIFO_pf++; // add page fault
-            FIFO_references++; // add page reference
+            FIFO_ref++; // add page reference
 
-            int frame_to_use;
-            if (next_available_frame < PHYSICAL_PAGES) {
-                frame_to_use = next_available_frame++;
+            int use_frame;
+            if (next_aframe < PHYSICAL_PAGES) {
+                use_frame = next_aframe++;
             } else {
-                frame_to_use = oldest_frame;
-                if (physical_memory[frame_to_use].process_id != -1 &&
-                    page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].dirty) {
-                    FIFO_references++;
+                use_frame = oldest_frame;
+                if (physical_memory[use_frame].pid != -1 &&
+                    page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].dirty) {
+                    FIFO_ref++;
                     FIFO_dw++;
-                    page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].dirty = 0;
+                    page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].dirty = 0;
                 }
-                page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].present = 0;
+                page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].present = 0;
 
                 // Next oldest frame (+1) since oldest one was just used
                 oldest_frame = (oldest_frame + 1) % PHYSICAL_PAGES;
             }
 
             // Update page table for the new page
-            page_tables[process_id][virtual_page_number].present = 1;
-            page_tables[process_id][virtual_page_number].frame_num = frame_to_use;
-            page_tables[process_id][virtual_page_number].dirty = (access_type == 'W');
-            page_tables[process_id][virtual_page_number].referenced = 1;
+            page_tables[pid][virtual_pn].present = 1;
+            page_tables[pid][virtual_pn].frame_num = use_frame;
+            page_tables[pid][virtual_pn].dirty = (access_type == 'W');
+            page_tables[pid][virtual_pn].referenced = 1;
 
             // Update physical memory
-            physical_memory[frame_to_use].process_id = process_id;
-            physical_memory[frame_to_use].virtual_page_number = virtual_page_number;
-            physical_memory[frame_to_use].dirty = (access_type == 'W');
+            physical_memory[use_frame].pid = pid;
+            physical_memory[use_frame].virtual_pn = virtual_pn;
+            physical_memory[use_frame].dirty = (access_type == 'W');
         } else { 
             // Page already present
-            page_tables[process_id][virtual_page_number].referenced = 1;
+            page_tables[pid][virtual_pn].referenced = 1;
             if (access_type == 'W') {
-                page_tables[process_id][virtual_page_number].dirty = 1;
-                int frame_num = page_tables[process_id][virtual_page_number].frame_num;
+                page_tables[pid][virtual_pn].dirty = 1;
+                int frame_num = page_tables[pid][virtual_pn].frame_num;
                 physical_memory[frame_num].dirty = 1;
             }
         }
 
-        if (reference_count == REFERENCE_RESET_INTERVAL) {
+        if (ref_count == REFERENCE_RESET_INTERVAL) {
             for (int i = 0; i < 10; i++) {
                 for (int j = 0; j < PAGE_TABLE_ENTRIES; j++) {
                     page_tables[i][j].referenced = 0;
                 }
             }
-            reference_count = 0;
+            ref_count = 0;
         }
     }
 
     printf("Total Page Faults: %d\n", FIFO_pf);
-    printf("Total Disk References: %d\n", FIFO_references);
+    printf("Total Disk References: %d\n", FIFO_ref);
     printf("Total Dirty Page Writes: %d\n", FIFO_dw);
     rewind(fp);
 }
@@ -217,7 +208,7 @@ void LRU(FILE *fp) {
     char line[256];
 
     for (int i = 0; i < PHYSICAL_PAGES; i++) {
-        physical_memory[i].process_id = -1;
+        physical_memory[i].pid = -1;
     }
 
     printf("\n LRU Algorithm:  \n");
@@ -245,8 +236,8 @@ void LRU(FILE *fp) {
                 int lru_frame = -1; 
                 int min_last_used = current_time + 1; 
                 for (int i = 0; i < PHYSICAL_PAGES; i++) {
-                    if (physical_memory[i].process_id != -1 && physical_memory[i].last_access_time < min_last_used) {
-                        min_last_used = physical_memory[i].last_access_time;
+                    if (physical_memory[i].pid != -1 && physical_memory[i].last_acc_time < min_last_used) {
+                        min_last_used = physical_memory[i].last_acc_time;
                         lru_frame = i;
                     }
                 }
@@ -256,9 +247,9 @@ void LRU(FILE *fp) {
                     if (physical_memory[frame_to_use].dirty) {
                         LRU_references++;
                         LRU_dw++;
-                        page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].dirty = 0;
+                        page_tables[physical_memory[frame_to_use].pid][physical_memory[frame_to_use].virtual_pn].dirty = 0;
                     }
-                    page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].present = 0;
+                    page_tables[physical_memory[frame_to_use].pid][physical_memory[frame_to_use].virtual_pn].present = 0;
                 } else {
                     fprintf(stderr, "Error: No LRU frame found for replacement\n");
                     exit(1);
@@ -270,9 +261,9 @@ void LRU(FILE *fp) {
             page_tables[process_id][virtual_page_number].dirty = (access_type == 'W');
             page_tables[process_id][virtual_page_number].referenced = 1;
 
-            physical_memory[frame_to_use].process_id = process_id;
-            physical_memory[frame_to_use].virtual_page_number = virtual_page_number;
-            physical_memory[frame_to_use].last_access_time = current_time;
+            physical_memory[frame_to_use].pid = process_id;
+            physical_memory[frame_to_use].virtual_pn = virtual_page_number;
+            physical_memory[frame_to_use].last_acc_time = current_time;
             physical_memory[frame_to_use].dirty = (access_type == 'W');
         } else {
             page_tables[process_id][virtual_page_number].referenced = 1;
@@ -282,7 +273,7 @@ void LRU(FILE *fp) {
                 physical_memory[frame_num].dirty = 1;
             }
             int frame_num = page_tables[process_id][virtual_page_number].frame_num;
-            physical_memory[frame_num].last_access_time = current_time;
+            physical_memory[frame_num].last_acc_time = current_time;
         }
 
         if (reference_count == REFERENCE_RESET_INTERVAL) {
@@ -305,139 +296,134 @@ void LRU(FILE *fp) {
 void PER(FILE *fp) {
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0};
     FRAME physical_memory[PHYSICAL_PAGES] = {0};
-    int next_available_frame = 0;
-    int PER_pf = 0;
-    int PER_references = 0;
-    int PER_dw = 0;
-    int reference_count = 0;
-    int current_time = 0;
+    int next_aframe, PER_pf, PER_ref, PER_dw, ref_count, curr_time= 0;
     char line[256];
 
     for (int i = 0; i < PHYSICAL_PAGES; i++) {
-        physical_memory[i].process_id = -1;
+        physical_memory[i].pid = -1;
     }
 
-    printf("\n Periodic Reference Reset (PER) Algorithm: n");
+    printf("\n Periodic Reference Reset (PER) Algorithm: \n");
 
     while (fgets(line, sizeof(line), fp)) {
-        int process_id, virtual_address;
+        int pid, virtual_addr;
         char access_type;
-        if (sscanf(line, "%d %d %c", &process_id, &virtual_address, &access_type) != 3) {
+        if (sscanf(line, "%d %d %c", &pid, &virtual_addr, &access_type) != 3) {
             continue;
         }
-        current_time++;
-        reference_count++;
+        curr_time++;
+        ref_count++;
 
-        int virtual_page_number, offset;
-        PAGE_OFFSET(virtual_address, &virtual_page_number, &offset);
+        int virtual_pn, offset;
+        PAGE_OFFSET(virtual_addr, &virtual_pn, &offset);
 
-        if (!page_tables[process_id][virtual_page_number].present) {
+        if (!page_tables[pid][virtual_pn].present) {
             PER_pf++; // Page Fault
-            PER_references++;
+            PER_ref++;
 
-            int frame_to_use;
-            if (next_available_frame < PHYSICAL_PAGES) {
-                frame_to_use = next_available_frame++;
+            int use_frame;
+            if (next_aframe < PHYSICAL_PAGES) {
+                use_frame = next_aframe++;
             } else {
-                int victim_frame = -1; //locate page
+                int check_frame = -1; //locate page
 
                 for (int i = 0; i < PHYSICAL_PAGES; i++) { //identify unallocated pages
-                    if (physical_memory[i].process_id == -1) {
-                        victim_frame = i;
+                    if (physical_memory[i].pid == -1) {
+                        check_frame = i;
                         break;
                     }
                 }
 
-                if (victim_frame == -1) {
+                if (check_frame == -1) {
                     for (int i = 0; i < PHYSICAL_PAGES; i++) { //check for unreference and clean 
-                        if (physical_memory[i].process_id != -1 &&
-                            !page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].referenced &&
-                            !page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].dirty) {
-                            victim_frame = i;
+                        if (physical_memory[i].pid != -1 &&
+                            !page_tables[physical_memory[i].pid][physical_memory[i].virtual_pn].referenced &&
+                            !page_tables[physical_memory[i].pid][physical_memory[i].virtual_pn].dirty) {
+                            check_frame = i;
                             break;
                         }
                     }
                 }
 
-                if (victim_frame == -1) {
+                if (check_frame == -1) {
                     for (int i = 0; i < PHYSICAL_PAGES; i++) { //check for unferenced and dirty
-                        if (physical_memory[i].process_id != -1 &&
-                            !page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].referenced &&
-                            page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].dirty) {
-                            victim_frame = i;
+                        if (physical_memory[i].pid != -1 &&
+                            !page_tables[physical_memory[i].pid][physical_memory[i].virtual_pn].referenced &&
+                            page_tables[physical_memory[i].pid][physical_memory[i].virtual_pn].dirty) {
+                            check_frame = i;
                             break;
                         }
                     }
                 }
 
-                if (victim_frame == -1) {
+                if (check_frame == -1) {
                     for (int i = 0; i < PHYSICAL_PAGES; i++) { //check for referenced and clean
-                        if (physical_memory[i].process_id != -1 &&
-                            page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].referenced &&
-                            !page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].dirty) {
-                            victim_frame = i;
+                        if (physical_memory[i].pid != -1 &&
+                            page_tables[physical_memory[i].pid][physical_memory[i].virtual_pn].referenced &&
+                            !page_tables[physical_memory[i].pid][physical_memory[i].virtual_pn].dirty) {
+                            check_frame = i;
                             break;
                         }
                     }
                 }
 
-                if (victim_frame == -1) {
+                if (check_frame == -1) {
                     for (int i = 0; i < PHYSICAL_PAGES; i++) { //check for referenced and dirty
-                        if (physical_memory[i].process_id != -1 &&
-                            page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].referenced &&
-                            page_tables[physical_memory[i].process_id][physical_memory[i].virtual_page_number].dirty) {
-                            victim_frame = i;
+                        if (physical_memory[i].pid != -1 &&
+                            page_tables[physical_memory[i].pid][physical_memory[i].virtual_pn].referenced &&
+                            page_tables[physical_memory[i].pid][physical_memory[i].virtual_pn].dirty) {
+                            check_frame = i;
                             break;
                         }
                     }
                 }
 
-                if (victim_frame != -1) {
-                    frame_to_use = victim_frame;
-                    if (physical_memory[frame_to_use].dirty) {
-                        PER_references++;
+                if (check_frame != -1) {
+                    use_frame = check_frame;
+                    if (physical_memory[use_frame].dirty) {
+                        PER_ref++;
                         PER_dw++;
-                        page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].dirty = 0;
+                        page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].dirty = 0;
                     }
-                    page_tables[physical_memory[frame_to_use].process_id][physical_memory[frame_to_use].virtual_page_number].present = 0;
+                    page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].present = 0;
                 } else {
                     fprintf(stderr, "Error: No victim frame found for PER replacement\n");
                     exit(1);
                 }
             }
 
-            page_tables[process_id][virtual_page_number].present = 1;
-            page_tables[process_id][virtual_page_number].frame_num = frame_to_use;
-            page_tables[process_id][virtual_page_number].dirty = (access_type == 'W');
-            page_tables[process_id][virtual_page_number].referenced = 1;
+            page_tables[pid][virtual_pn].present = 1;
+            page_tables[pid][virtual_pn].frame_num = use_frame;
+            page_tables[pid][virtual_pn].dirty = (access_type == 'W');
+            page_tables[pid][virtual_pn].referenced = 1;
 
-            physical_memory[frame_to_use].process_id = process_id;
-            physical_memory[frame_to_use].virtual_page_number = virtual_page_number;
-            physical_memory[frame_to_use].last_access_time = current_time;
-            physical_memory[frame_to_use].dirty = (access_type == 'W');
+            physical_memory[use_frame].pid = pid;
+            physical_memory[use_frame].virtual_pn = virtual_pn;
+            physical_memory[use_frame].last_acc_time = curr_time;
+            physical_memory[use_frame].dirty = (access_type == 'W');
         } else {
-            page_tables[process_id][virtual_page_number].referenced = 1;
+            page_tables[pid][virtual_pn].referenced = 1;
             if (access_type == 'W') {
-                page_tables[process_id][virtual_page_number].dirty = 1;
-                int frame_num = page_tables[process_id][virtual_page_number].frame_num;
+                page_tables[pid][virtual_pn].dirty = 1;
+                int frame_num = page_tables[pid][virtual_pn].frame_num;
                 physical_memory[frame_num].dirty = 1;
             }
-            int frame_num = page_tables[process_id][virtual_page_number].frame_num;
-            physical_memory[frame_num].last_access_time = current_time;
+            int frame_num = page_tables[pid][virtual_pn].frame_num;
+            physical_memory[frame_num].last_acc_time = curr_time;
         }
 
-        if (reference_count == REFERENCE_RESET_INTERVAL) {
+        if (ref_count == REFERENCE_RESET_INTERVAL) {
             for (int i = 0; i < 10; i++) {
                 for (int j = 0; j < PAGE_TABLE_ENTRIES; j++) {
                     page_tables[i][j].referenced = 0;
                 }
             }
-            reference_count = 0;
+            ref_count = 0;
         }
     }
 
     printf("Total Page Faults: %d\n", PER_pf);
-    printf("Total Disk References: %d\n", PER_references);
+    printf("Total Disk References: %d\n", PER_ref);
     printf("Total Dirty Page Writes: %d\n", PER_dw);
     rewind(fp);
 }
