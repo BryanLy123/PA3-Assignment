@@ -36,7 +36,7 @@ void PAGE_OFFSET(int virtual_addr, int *page_num, int *offset) {
 void RAND(FILE *fp) {
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0}; // Assuming max 10 processes
     FRAME physical_memory[PHYSICAL_PAGES] = {0};
-    int next_aframe, rand_pf, rand_ref, rand_dw, ref_count= 0; // aframe = available frame
+    int next_aframe = 0, rand_pf = 0, rand_ref = 0, rand_dw = 0, ref_count = 0; // aframe = available frame
     char line[256];
 
     // Initialize random seed
@@ -121,7 +121,7 @@ void RAND(FILE *fp) {
 void FIFO(FILE*fp){
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0};
     FRAME physical_memory[PHYSICAL_PAGES] = {0};
-    int next_aframe, FIFO_pf, FIFO_ref, FIFO_dw, ref_count, oldest_frame = 0;
+    int next_aframe = 0, FIFO_pf = 0, FIFO_ref = 0, FIFO_dw =0, ref_count =0, oldest_frame = 0;
     char line[256];
 
     printf("\n FIFO Algorithm: \n");
@@ -153,9 +153,8 @@ void FIFO(FILE*fp){
                     page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].dirty = 0;
                 }
                 page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].present = 0;
-
-                // Next oldest frame (+1) since oldest one was just used
-                oldest_frame = (oldest_frame + 1) % PHYSICAL_PAGES;
+              
+                oldest_frame = (oldest_frame + 1) % PHYSICAL_PAGES;// Next oldest frame (+1) since oldest one was just used
             }
 
             // Update page table for the new page
@@ -199,12 +198,7 @@ void FIFO(FILE*fp){
 void LRU(FILE *fp) {
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0};
     FRAME physical_memory[PHYSICAL_PAGES] = {0};
-    int next_available_frame = 0;
-    int LRU_pf = 0;
-    int LRU_references = 0;
-    int LRU_dw = 0;
-    int reference_count = 0;
-    int current_time = 0;
+    int next_available_frame = 0, LRU_pf = 0, LRU_references = 0, LRU_dw = 0, reference_count = 0, current_time = 0;
     char line[256];
 
     for (int i = 0; i < PHYSICAL_PAGES; i++) {
@@ -216,6 +210,7 @@ void LRU(FILE *fp) {
     while (fgets(line, sizeof(line), fp)) {
         int process_id, virtual_address;
         char access_type;
+        
         if (sscanf(line, "%d %d %c", &process_id, &virtual_address, &access_type) != 3) {
             continue;
         }
@@ -272,6 +267,7 @@ void LRU(FILE *fp) {
                 int frame_num = page_tables[process_id][virtual_page_number].frame_num;
                 physical_memory[frame_num].dirty = 1;
             }
+    
             int frame_num = page_tables[process_id][virtual_page_number].frame_num;
             physical_memory[frame_num].last_acc_time = current_time;
         }
@@ -296,7 +292,7 @@ void LRU(FILE *fp) {
 void PER(FILE *fp) {
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0};
     FRAME physical_memory[PHYSICAL_PAGES] = {0};
-    int next_aframe, PER_pf, PER_ref, PER_dw, ref_count, curr_time= 0;
+    int next_aframe = 0, PER_pf = 0, PER_ref = 0, PER_dw = 0, ref_count = 0, curr_time = 0;
     char line[256];
 
     for (int i = 0; i < PHYSICAL_PAGES; i++) {
@@ -436,13 +432,17 @@ int main() {
     printf("Select a data file to open:\n");
     printf("1. data1.txt\n");
     printf("2. data2.txt\n");
-    printf("Enter desired dataset (1 or 2): ");
+    printf("3. data3.txt\n");
+    printf("Enter desired dataset (1, 2, or 3): ");
+   // printf("Enter desired dataset (1 or 2): ");
     scanf("%d", &data);
 
     if (data == 1) {
         strcpy(filename, "data1.txt");
     } else if (data == 2) {
         strcpy(filename, "data2.txt");
+    } else if (data == 3) { // Our test file to verify
+        strcpy(filename, "data3.txt");
     } else {
         printf("Invalid Selection!!!\n");
         return 1;
