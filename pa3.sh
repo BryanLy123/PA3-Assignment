@@ -1,4 +1,5 @@
-cd Desktop/PA3/src 
-gcc main.c -o main 
+#!/bin/bash
+mkdir -p build
+cd ./build 
+gcc ../main.c -o main  
 chmod +x main 
-./main
