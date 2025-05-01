@@ -7,4 +7,7 @@ Authors
 3. Bryan Ly
 
 Data1 and Data2 are the defined datasets to be tested
-Data3 refers to the testing dataset
+
+To run: 
+
+- ./pa3.sh (you may have to chmod the shell and obj files...)
