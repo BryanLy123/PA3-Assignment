@@ -474,13 +474,16 @@ void PER(FILE *fp)
 
 void CUSTOM_ALG(FILE *fp)
 {
-    fflush(stdout);
+    // Allocate main tables and structs / vars
     PTE page_tables[10][PAGE_TABLE_ENTRIES] = {0};
     FRAME physical_memory[PHYSICAL_PAGES] = {0};
-    // printf("allocating array\n");
-    char (*buffer)[256] = malloc(sizeof(char[50000][256]));
     int frame_to_use = 0, next_aframe = 0, CUST_pf = 0, CUST_ref = 0, CUST_dw = 0, ref_count = 0, curr_time = 0;
     char line[256];
+
+    // malloc a buffer to load in all memory requests from the file
+    char (*buffer)[256] = malloc(sizeof(char[50000][256]));
+
+    // Clear physical mem
     for (int i = 0; i < PHYSICAL_PAGES; i++)
     {
         physical_memory[i].pid = -1;
@@ -488,7 +491,7 @@ void CUSTOM_ALG(FILE *fp)
 
     printf("\nCustom Page Replacement Algorithm: \n");
 
-    // printf("Populating buffer\n");
+    // Load the buffer with all mem requests
     for (int i = 0; i < 50000; i++)
     {
         fgets(buffer[i], sizeof(buffer[i]), fp);
@@ -497,7 +500,7 @@ void CUSTOM_ALG(FILE *fp)
     rewind(fp);
 
     int mem_access_count = 0;
-    while (fgets(line, sizeof(line), fp)) // reset to 50000
+    while (fgets(line, sizeof(line), fp))
     {
         int process_id, virtual_address;
         char access_type;
@@ -519,20 +522,19 @@ void CUSTOM_ALG(FILE *fp)
             CUST_pf++;
             CUST_ref++;
 
+            // If we have space...
             if (next_aframe < PHYSICAL_PAGES)
             {
                 frame_to_use = next_aframe++;
-                // printf("Adding Page\n");
-                // fflush(stdout);
             }
-            else // PHYSICAL MEM FULL
+            else // If mem full..
             {
-                // Paradigm: Replaces furthest VPN from current VPN.
-                // REPLACE ALGO
                 int tracking_buffer[PHYSICAL_PAGES][2] = {-1};
                 int use_frame = -1;
                 int use_count_max = 0;
                 int temp_addr;
+                // for each page in memory, scan the entire upcoming requests until we find the next use of this page
+                // Fill a buffer with the address and distance from current mem request (prob don't need to store addr but helpful for debug)
                 for (int j = 0; j < PHYSICAL_PAGES; j++)
                 {
                     tracking_buffer[j][0] = physical_memory[j].virtual_pn;
@@ -548,7 +550,6 @@ void CUSTOM_ALG(FILE *fp)
                         int temp_vpn;
                         int temp_offset;
                         PAGE_OFFSET(temp_virtual_address, &temp_vpn, &temp_offset);
-                        // printf("physical vpn: %d, table entry vpn: %d\n", tracking_buffer[j][0], temp_vpn);
                         if (tracking_buffer[j][0] == temp_vpn)
                         {
                             found = 1;
@@ -559,9 +560,9 @@ void CUSTOM_ALG(FILE *fp)
                         }
                     }
                     tracking_buffer[j][1] = k;
-                    // printf("%d-----------------------------------\n", tracking_buffer[j][1]);
                 }
 
+                // Calculate which of all the pages is the furthest away
                 int furthest = 0;
                 for (int i = 0; i < PHYSICAL_PAGES; i++)
                 {
@@ -572,7 +573,8 @@ void CUSTOM_ALG(FILE *fp)
                     }
                 }
 
-                if (use_frame != -1) // change this
+                // Swap the furthest use page out of memory in exchange for the current requested page
+                if (use_frame != -1)
                 {
                     if (physical_memory[use_frame].dirty)
                     {
@@ -585,10 +587,10 @@ void CUSTOM_ALG(FILE *fp)
                 else
                 {
                     perror("No page");
-                    // use_frame = 1;
                 }
             }
 
+            // Handle swap and dirty bit things
             page_tables[process_id][virtual_page_number].present = 1;
             page_tables[process_id][virtual_page_number].frame_num = frame_to_use;
             page_tables[process_id][virtual_page_number].dirty = (access_type == 'W');
@@ -614,89 +616,9 @@ void CUSTOM_ALG(FILE *fp)
         mem_access_count++;
     }
 
-    // while (fgets(line, sizeof(line), fp))
-    // {
-    //     int process_id, virtual_address;
-    //     char access_type;
-
-    //     // Grab the next memory op
-    //     if (sscanf(line, "%d %d %c", &process_id, &virtual_address, &access_type) != 3)
-    //     {
-    //         continue;
-    //     }
-    //     curr_time++;
-    //     ref_count++;
-
-    //     // Grab VPN & OFFSET from VA
-    //     int virtual_page_number, offset;
-    //     PAGE_OFFSET(virtual_address, &virtual_page_number, &offset);
-
-    //     if (!page_tables[process_id][virtual_page_number].present)
-    //     {
-    //         CUST_pf++;
-    //         CUST_ref++;
-
-    //         if (next_aframe < PHYSICAL_PAGES)
-    //         {
-    //             frame_to_use = next_aframe++;
-    //         }
-    //         else // PHYSICAL MEM FULL
-    //         {
-    //             // Paradigm: Replaces furthest VPN from current VPN.
-    //             // REPLACE ALGO
-    //             int furthest_distance = 0;
-    //             int furthest_vpn = -1;
-    //             int use_frame = -1;
-    //             for (int i = 1; i < PHYSICAL_PAGES; i++)
-    //             {
-    //                 int current_distance = abs(virtual_page_number - physical_memory[i].virtual_pn);
-    //                 if (furthest_distance < current_distance)
-    //                 {
-    //                     furthest_vpn = physical_memory[i].virtual_pn;
-    //                     use_frame = i;
-    //                 }
-    //             }
-
-    //             if (furthest_vpn != -1)
-    //             {
-    //                 if (physical_memory[use_frame].dirty)
-    //                 {
-    //                     CUST_ref++;
-    //                     CUST_dw++;
-    //                     page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].dirty = 0;
-    //                 }
-    //                 page_tables[physical_memory[use_frame].pid][physical_memory[use_frame].virtual_pn].present = 0;
-    //             }
-    //             else
-    //             {
-    //                 perror("Unable to find frame to swap...");
-    //             }
-    //         }
-
-    //         page_tables[process_id][virtual_page_number].present = 1;
-    //         page_tables[process_id][virtual_page_number].frame_num = frame_to_use;
-    //         page_tables[process_id][virtual_page_number].dirty = (access_type == 'W');
-    //         page_tables[process_id][virtual_page_number].referenced = 1;
-
-    //         physical_memory[frame_to_use].pid = process_id;
-    //         physical_memory[frame_to_use].virtual_pn = virtual_page_number;
-    //         physical_memory[frame_to_use].last_acc_time = curr_time;
-    //         physical_memory[frame_to_use].dirty = (access_type == 'W');
-    //     }
-    //     else
-    //     {
-    //         page_tables[process_id][virtual_page_number].referenced = 1;
-    //         if (access_type == 'W')
-    //         {
-    //             page_tables[process_id][virtual_page_number].dirty = 1;
-    //             int frame_num = page_tables[process_id][virtual_page_number].frame_num;
-    //             physical_memory[frame_num].dirty = 1;
-    //         }
-    //         int frame_num = page_tables[process_id][virtual_page_number].frame_num;
-    //         physical_memory[frame_num].last_acc_time = curr_time;
-    //     }
-    // }
+    // Free our poor malloc!!
     free(buffer);
+
     printf("\tTotal Page Faults: %d\n", CUST_pf);
     printf("\tTotal Disk References: %d\n", CUST_ref);
     printf("\tTotal Dirty Page Writes: %d\n", CUST_dw);
